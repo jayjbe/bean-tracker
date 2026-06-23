@@ -94,6 +94,32 @@ class TestAdd(unittest.TestCase):
                 handle_add(self.conn, ns(name="X", origin_country="Y", roast_level="Z", pounds="abc"))
         self.assertIn("number", err.getvalue())
 
+    def test_nan_rejected(self):
+        with patch("sys.stderr", new_callable=StringIO) as err:
+            with self.assertRaises(SystemExit):
+                handle_add(self.conn, ns(name="X", origin_country="Y", roast_level="Z", pounds="nan"))
+        self.assertIn("finite", err.getvalue())
+        count = self.conn.execute("SELECT COUNT(*) FROM beans").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_inf_rejected(self):
+        with patch("sys.stderr", new_callable=StringIO) as err:
+            with self.assertRaises(SystemExit):
+                handle_add(self.conn, ns(name="X", origin_country="Y", roast_level="Z", pounds="inf"))
+        self.assertIn("finite", err.getvalue())
+        count = self.conn.execute("SELECT COUNT(*) FROM beans").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_low_stock_warning_on_add(self):
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_add(self.conn, ns(name="Low", origin_country="Y", roast_level="Z", pounds="0.5"))
+        self.assertIn("low on stock", out.getvalue())
+
+    def test_no_warning_above_threshold_on_add(self):
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_add(self.conn, ns(name="Plenty", origin_country="Y", roast_level="Z", pounds="2.0"))
+        self.assertNotIn("low on stock", out.getvalue())
+
 
 class TestList(unittest.TestCase):
     def setUp(self):
@@ -114,6 +140,20 @@ class TestList(unittest.TestCase):
         self.assertIn("Kenya", output)
         self.assertIn("medium", output)
         self.assertIn("2.5", output)
+
+    def test_column_widths_at_least_header_width(self):
+        with patch("sys.stdout", new_callable=StringIO):
+            handle_add(self.conn, ns(name="A", origin_country="B", roast_level="C", pounds="1.5"))
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_list(self.conn, ns())
+        lines = out.getvalue().splitlines()
+        header = lines[0]
+        self.assertIn("Name", header)
+        self.assertIn("Origin", header)
+        self.assertIn("Roast", header)
+        name_col_start = header.index("Name")
+        origin_col_start = header.index("Origin")
+        self.assertGreaterEqual(origin_col_start - name_col_start, len("Name"))
 
 
 class TestListLowStock(unittest.TestCase):

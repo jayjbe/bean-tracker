@@ -1,4 +1,5 @@
 import argparse
+import math
 import sqlite3
 import sys
 
@@ -29,6 +30,9 @@ def _parse_positive_float(value, field="pounds"):
     except ValueError:
         print(f"Error: {field} must be a number.", file=sys.stderr)
         sys.exit(1)
+    if not math.isfinite(f):
+        print(f"Error: {field} must be a finite number.", file=sys.stderr)
+        sys.exit(1)
     if f <= 0:
         print(f"Error: {field} must be a positive number.", file=sys.stderr)
         sys.exit(1)
@@ -47,6 +51,8 @@ def handle_add(conn, args):
         print(f"Error: a bean named '{args.name}' already exists.", file=sys.stderr)
         sys.exit(1)
     print(f"Added '{args.name}'.")
+    if pounds < LOW_STOCK_THRESHOLD:
+        print(f"Warning: '{args.name}' is low on stock ({pounds} lbs).")
 
 
 def handle_list(conn, args):
@@ -56,9 +62,9 @@ def handle_list(conn, args):
     if not rows:
         print("No beans in inventory.")
         return
-    name_w = max(len(r[0]) for r in rows)
-    origin_w = max(len(r[1]) for r in rows)
-    roast_w = max(len(r[2]) for r in rows)
+    name_w = max(len("Name"), max(len(r[0]) for r in rows))
+    origin_w = max(len("Origin"), max(len(r[1]) for r in rows))
+    roast_w = max(len("Roast"), max(len(r[2]) for r in rows))
     header = f"{'Name':<{name_w}}  {'Origin':<{origin_w}}  {'Roast':<{roast_w}}  Lbs"
     print(header)
     print("-" * len(header))
@@ -116,7 +122,11 @@ def build_parser():
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
-    conn = get_connection("beans.db")
+    try:
+        conn = get_connection("beans.db")
+    except sqlite3.OperationalError as e:
+        print(f"Error: could not open database: {e}", file=sys.stderr)
+        sys.exit(1)
     try:
         init_db(conn)
         dispatch = {
@@ -126,5 +136,8 @@ if __name__ == "__main__":
             "delete": handle_delete,
         }
         dispatch[args.command](conn, args)
+    except sqlite3.DatabaseError as e:
+        print(f"Error: database error: {e}", file=sys.stderr)
+        sys.exit(1)
     finally:
         conn.close()
