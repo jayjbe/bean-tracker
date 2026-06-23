@@ -2,6 +2,8 @@ import argparse
 import sqlite3
 import sys
 
+LOW_STOCK_THRESHOLD = 1.0
+
 
 def get_connection(path):
     return sqlite3.connect(path)
@@ -61,7 +63,8 @@ def handle_list(conn, args):
     print(header)
     print("-" * len(header))
     for name, origin, roast, pounds in rows:
-        print(f"{name:<{name_w}}  {origin:<{origin_w}}  {roast:<{roast_w}}  {pounds}")
+        warning = "  LOW STOCK" if pounds < LOW_STOCK_THRESHOLD else ""
+        print(f"{name:<{name_w}}  {origin:<{origin_w}}  {roast:<{roast_w}}  {pounds}{warning}")
 
 
 def handle_update(conn, args):
@@ -75,6 +78,8 @@ def handle_update(conn, args):
         print(f"Error: no bean named '{args.name}' found.", file=sys.stderr)
         sys.exit(1)
     print(f"Updated '{args.name}' to {pounds} lbs.")
+    if pounds < LOW_STOCK_THRESHOLD:
+        print(f"Warning: '{args.name}' is low on stock ({pounds} lbs).")
 
 
 def handle_delete(conn, args):

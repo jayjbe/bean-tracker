@@ -15,6 +15,7 @@ from beans import (
     handle_list,
     handle_update,
     init_db,
+    LOW_STOCK_THRESHOLD,
 )
 
 
@@ -115,6 +116,25 @@ class TestList(unittest.TestCase):
         self.assertIn("2.5", output)
 
 
+class TestListLowStock(unittest.TestCase):
+    def setUp(self):
+        self.conn = make_conn()
+
+    def test_low_stock_marker_shown(self):
+        with patch("sys.stdout", new_callable=StringIO):
+            handle_add(self.conn, ns(name="Depleted", origin_country="X", roast_level="light", pounds="0.5"))
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_list(self.conn, ns())
+        self.assertIn("LOW STOCK", out.getvalue())
+
+    def test_no_marker_above_threshold(self):
+        with patch("sys.stdout", new_callable=StringIO):
+            handle_add(self.conn, ns(name="Plenty", origin_country="X", roast_level="light", pounds="2.0"))
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_list(self.conn, ns())
+        self.assertNotIn("LOW STOCK", out.getvalue())
+
+
 class TestUpdate(unittest.TestCase):
     def setUp(self):
         self.conn = make_conn()
@@ -132,6 +152,16 @@ class TestUpdate(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 handle_update(self.conn, ns(name="Ghost", pounds="1.0"))
         self.assertIn("Ghost", err.getvalue())
+
+    def test_low_stock_warning_on_update(self):
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_update(self.conn, ns(name="Kenya AA", pounds="0.5"))
+        self.assertIn("low on stock", out.getvalue())
+
+    def test_no_warning_above_threshold(self):
+        with patch("sys.stdout", new_callable=StringIO) as out:
+            handle_update(self.conn, ns(name="Kenya AA", pounds="2.0"))
+        self.assertNotIn("low on stock", out.getvalue())
 
     def test_zero_pounds_rejected(self):
         with patch("sys.stderr", new_callable=StringIO):
