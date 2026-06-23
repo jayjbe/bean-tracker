@@ -1,0 +1,4 @@
+.compound-engineering/*.local.yaml
+beans.db
+__pycache__/
+*.pyc
